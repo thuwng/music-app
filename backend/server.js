@@ -1,3 +1,4 @@
+// server.js
 const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
@@ -6,13 +7,12 @@ const apiRoutes = require("./routes/api.js");
 const timeout = require("connect-timeout");
 require("dotenv").config();
 
-// Khởi tạo ứng dụng Express
 const app = express();
 
 // Middleware
 app.use(
   cors({
-    origin: "*", // Cho phép truy cập từ bất kỳ đâu (Render URL)
+    origin: "*", // Allow all origins (adjust for production)
     methods: ["GET", "POST", "PUT", "DELETE"],
     allowedHeaders: ["Content-Type", "Authorization"],
   })
@@ -24,23 +24,19 @@ app.use(
   express.static(path.join(__dirname, "public/assets/images"))
 );
 
-// Áp dụng timeout cho tất cả các route (10 phút)
 app.use(timeout("600s"));
 
-// Xử lý khi timeout xảy ra
 app.use((req, res, next) => {
   if (req.timedout) {
     console.error(`Request timed out for ${req.method} ${req.url}`);
     return res.status(408).json({
       success: false,
-      message:
-        "Request timed out. Please try again with a smaller file or check your connection.",
+      message: "Request timed out. Please try again.",
     });
   }
   next();
 });
 
-// Middleware xử lý lỗi toàn cục
 app.use((err, req, res, next) => {
   console.error("Global error handler:", {
     message: err.message,
@@ -54,14 +50,14 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Kết nối MongoDB
+// MongoDB Atlas Connection
 const connectDB = async () => {
   try {
     await mongoose.connect(process.env.MONGO_URI, {
       useNewUrlParser: true,
       useUnifiedTopology: true,
     });
-    console.log("MongoDB connected successfully");
+    console.log("MongoDB Atlas connected successfully");
   } catch (err) {
     console.error("MongoDB connection error:", err);
     process.exit(1);
@@ -71,31 +67,27 @@ const connectDB = async () => {
 connectDB();
 
 // Routes
-app.use("/api", require("./routes/register"));
+app.use("/api", apiRoutes);
 
-// Phục vụ file tĩnh từ frontend
+// Serve frontend
 app.use(express.static(path.join(__dirname, "../frontend/build")));
 
-// Route mặc định cho frontend (React SPA)
 app.get("*", (req, res) => {
   res.sendFile(path.join(__dirname, "../frontend/build/index.html"));
 });
 
-// Khởi động server
+// Start server
 const PORT = process.env.PORT || 5000;
 const server = app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
 
-// Cấu hình timeout cho server
 server.timeout = 600000;
 
-// Xử lý lỗi khi server không khởi động được
 server.on("error", (err) => {
   console.error("Server error:", err);
 });
 
-// Graceful shutdown
 process.on("SIGTERM", () => {
   console.log("SIGTERM received. Shutting down gracefully...");
   server.close(() => {

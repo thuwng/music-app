@@ -1,23 +1,22 @@
+// components/Sidebar.js
 import React from "react";
-import { useNavigate } from "react-router-dom"; // Import useNavigate để điều hướng
+import { useNavigate } from "react-router-dom";
 
 function Sidebar({ activeSection, setActiveSection, setShowUpload }) {
-  const navigate = useNavigate(); // Hook điều hướng
+  const navigate = useNavigate();
 
   const handleSectionClick = (section) => {
     setActiveSection(section);
   };
 
   const handleUploadClick = () => {
-    setActiveSection("Library"); // Chuyển về section Library
-    setShowUpload(true); // Hiển thị input upload
-    console.log("Upload clicked, setShowUpload to:", true); // Debug
+    setActiveSection("Library");
+    setShowUpload(true);
   };
 
   const handleLogout = () => {
-    // Xóa token nếu có (giả sử bạn có lưu auth token)
-    localStorage.removeItem("authToken");
-    navigate("/"); // Chuyển hướng về trang đăng nhập
+    localStorage.removeItem("userId"); // Clear userId
+    navigate("/"); // Redirect to login page
   };
 
   return (

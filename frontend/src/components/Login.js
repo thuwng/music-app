@@ -1,3 +1,4 @@
+// components/Login.js
 import React, { useState } from "react";
 import axios from "axios";
 
@@ -8,10 +9,14 @@ function Login() {
   const handleLogin = async (e) => {
     e.preventDefault();
     try {
-      const response = await axios.post("/api/login", {
-        username,
-        password,
-      });
+      const response = await axios.post(
+        "https://otter-tune.onrender.com/api/login",
+        {
+          username,
+          password,
+        }
+      );
+      console.log("Login response:", response.data); // Debug log
       if (response.data.success) {
         localStorage.setItem("userId", response.data.userId);
         window.location.href = "/player";
@@ -19,7 +24,10 @@ function Login() {
         alert(response.data.message);
       }
     } catch (error) {
-      alert("Error logging in");
+      console.error("Login error:", error.response?.data || error.message);
+      alert(
+        "Error logging in: " + (error.response?.data?.message || error.message)
+      );
     }
   };
 
@@ -38,12 +46,14 @@ function Login() {
           value={username}
           onChange={(e) => setUsername(e.target.value)}
           placeholder="Username"
+          required
         />
         <input
           type="password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           placeholder="Password"
+          required
         />
         <button type="submit">Login</button>
       </form>

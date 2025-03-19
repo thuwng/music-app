@@ -72,9 +72,12 @@ function Player() {
         setSongs([]);
         return;
       }
-      const response = await axios.get(`/api/songs/${userId}`, {
-        params: { search: term },
-      });
+      const response = await axios.get(
+        `https://otter-tune.onrender.com/api/songs/${userId}`,
+        {
+          params: { search: term },
+        }
+      );
       setSongs(
         response.data.sort(
           (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
