@@ -1,25 +1,44 @@
-const fetch = require("node-fetch").default;
+const express = require("express");
+const router = express.Router();
+const User = require("../models/User"); // Import model User
 
-async function registerUser() {
+// Route đăng ký người dùng
+router.post("/register", async (req, res) => {
+  console.log("Received register request:", req.body);
+  const { username, password } = req.body;
+
+  if (!username || !password) {
+    console.log("Missing username or password");
+    return res
+      .status(400)
+      .json({ message: "Username and password are required" });
+  }
+
   try {
-    const response = await fetch("http://localhost:5000/api/register", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username: "thuwng", password: "20102005" }),
-    });
-
-    if (!response.ok) {
-      const text = await response.text();
-      throw new Error(
-        `HTTP error! Status: ${response.status}, Response: ${text}`
-      );
+    console.log("Checking if username exists...");
+    const existingUser = await User.findOne({ username });
+    if (existingUser) {
+      console.log("Username already exists:", username);
+      return res.status(400).json({ message: "Username already exists" });
     }
 
-    const data = await response.json();
-    console.log(data);
-  } catch (error) {
-    console.error("Error:", error.message);
-  }
-}
+    console.log("Creating new user...");
+    const newUser = new User({
+      username,
+      password,
+    });
 
-registerUser();
+    console.log("Saving user to database...");
+    await newUser.save();
+    console.log("User saved successfully:", newUser);
+
+    res
+      .status(201)
+      .json({ message: "User registered successfully", user: newUser });
+  } catch (error) {
+    console.error("Error in register route:", error);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+});
+
+module.exports = router; // Export router

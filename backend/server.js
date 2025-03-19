@@ -4,6 +4,7 @@ const cors = require("cors");
 const path = require("path");
 const apiRoutes = require("./routes/api.js");
 const timeout = require("connect-timeout");
+require("dotenv").config();
 
 // Khởi tạo ứng dụng Express
 const app = express();
@@ -70,7 +71,7 @@ const connectDB = async () => {
 connectDB();
 
 // Routes
-app.use("/api", apiRoutes);
+app.use("/api", require("./routes/register"));
 
 // Phục vụ file tĩnh từ frontend
 app.use(express.static(path.join(__dirname, "../frontend/build")));
