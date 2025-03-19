@@ -48,7 +48,6 @@ function Player() {
   const [audioUrl, setAudioUrl] = useState("");
   const [activeSection, setActiveSection] = useState("Library");
   const [showUpload, setShowUpload] = useState(false);
-  const [lyrics, setLyrics] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const userId = localStorage.getItem("userId");
 
@@ -194,11 +193,12 @@ function Player() {
     }
   };
 
-  const handleDownload = (filePath) => {
-    const downloadUrl = `/api/download/${filePath.split("/").pop()}`;
+  const handleDownload = (songId) => {
+    // Tạo URL để tải file trực tiếp từ route /download/:songId
+    const downloadUrl = `/api/download/${songId}`;
     const link = document.createElement("a");
     link.href = downloadUrl;
-    link.download = "";
+    link.download = ""; // Trình duyệt sẽ tự động lấy tên file từ URL
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -226,11 +226,11 @@ function Player() {
   };
 
   const handlePlay = (song) => {
-    const playUrl = `/uploads/${song.file_path.split("/").pop()}`;
+    // Sử dụng trực tiếp URL từ Cloudinary (song.file_path)
+    const playUrl = song.file_path;
     console.log("Playing URL:", playUrl);
     setAudioUrl(playUrl);
     setCurrentSong(song);
-    setLyrics(song.lyrics || "No lyrics available");
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current.load();
@@ -321,7 +321,7 @@ function Player() {
                         Play
                       </button>
                       <button
-                        onClick={() => handleDownload(song.file_path)}
+                        onClick={() => handleDownload(song._id)}
                         className="download-btn"
                       >
                         Download
@@ -369,11 +369,6 @@ function Player() {
               <span className="audio-player-artist">
                 {currentSong ? currentSong.artist : "Unknown Artist"}
               </span>
-              {lyrics && (
-                <div className="lyrics-container">
-                  <p>{lyrics}</p>
-                </div>
-              )}
             </div>
             <audio
               ref={audioRef}

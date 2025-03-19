@@ -74,7 +74,7 @@ const handleMulterError = (err, req, res, next) => {
   next(err);
 };
 
-// Hàm chuẩn hóa tên file (đã có sẵn, nhưng tôi sẽ dùng lại để xử lý tên file)
+// Hàm chuẩn hóa tên file
 const removeVietnameseTones = (str) => {
   if (!str) return "";
   str = str.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
@@ -135,7 +135,7 @@ router.get("/songs/:userId", async (req, res) => {
   }
 });
 
-// Route tải bài hát lên (đã sửa)
+// Route tải bài hát lên (đã tối ưu hóa)
 router.post(
   "/songs",
   (req, res, next) => {
@@ -172,11 +172,15 @@ router.post(
       const file_path = audioResult.secure_url;
       console.log("Audio uploaded to Cloudinary:", file_path);
 
-      // Bước 2: Trích xuất metadata từ file MP3
+      // Bước 2: Trích xuất metadata từ file MP3 (chỉ lấy thông tin cần thiết)
       console.log("Extracting metadata...");
       let metadata;
       try {
-        metadata = await mm.parseFile(filePathOnServer, { duration: true });
+        metadata = await mm.parseFile(filePathOnServer, {
+          duration: true,
+          skipCovers: false, // Vẫn lấy ảnh bìa
+          skipPostHeaders: true, // Bỏ qua thông tin không cần thiết
+        });
       } catch (metadataError) {
         console.error("Error extracting metadata:", metadataError.message);
         throw new Error("Failed to extract metadata from audio file");
@@ -215,7 +219,9 @@ router.post(
       // Bước 3: Xử lý ảnh bìa (nếu có)
       let coverImagePath = "/assets/images/cute-otter.png";
       if (metadata.common.picture && metadata.common.picture.length > 0) {
-        console.log("Uploading cover image to Cloudinary...");
+        console.log(
+          "Found cover image in metadata, uploading to Cloudinary..."
+        );
         const picture = metadata.common.picture[0];
         const imageBuffer = picture.data;
         try {
@@ -232,17 +238,14 @@ router.post(
             "Error uploading cover image:",
             imageUploadError.message
           );
-          // Không throw error ở đây, chỉ log và dùng ảnh mặc định
+          // Dùng ảnh mặc định nếu không tải được ảnh bìa
+          coverImagePath = "/assets/images/cute-otter.png";
         }
+      } else {
+        console.log("No cover image found in metadata, using default image.");
       }
 
-      // Bước 4: Xử lý lời bài hát (lyrics)
-      let lyrics = "No lyrics available";
-      if (metadata.common.lyrics && metadata.common.lyrics.length > 0) {
-        lyrics = metadata.common.lyrics[0].text || "No lyrics available";
-      }
-
-      // Bước 5: Lưu thông tin bài hát vào MongoDB
+      // Bước 4: Lưu thông tin bài hát vào MongoDB (bỏ qua lyrics để tối ưu)
       console.log("Saving song to MongoDB...");
       const song = new Song({
         userId,
@@ -251,7 +254,6 @@ router.post(
         album: songAlbum,
         file_path,
         coverImagePath,
-        lyrics,
         duration,
         genre: genre || "Other",
       });
@@ -259,7 +261,7 @@ router.post(
       await song.save();
       console.log("Song saved to MongoDB:", song);
 
-      // Bước 6: Xóa file tạm trên server
+      // Bước 5: Xóa file tạm trên server
       if (fs.existsSync(filePathOnServer)) {
         console.log("Deleting temporary file on server...");
         fs.unlinkSync(filePathOnServer);
@@ -289,6 +291,23 @@ router.post(
     }
   }
 );
+
+// Route tải file MP3 (sửa để chuyển hướng trực tiếp đến URL của file)
+router.get("/download/:songId", async (req, res) => {
+  try {
+    const song = await Song.findById(req.params.songId);
+    if (!song) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Song not found" });
+    }
+    // Chuyển hướng trực tiếp đến URL của file trên Cloudinary
+    res.redirect(song.file_path);
+  } catch (error) {
+    console.error("Error in /download route:", error);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+});
 
 // Các route khác (giữ nguyên)
 router.get("/favorites/:userId", async (req, res) => {
@@ -326,20 +345,6 @@ router.delete("/favorites/:userId/:songId", async (req, res) => {
       songId: req.params.songId,
     });
     res.json({ success: true });
-  } catch (error) {
-    res.status(500).json({ success: false, message: "Server error" });
-  }
-});
-
-router.get("/download/:songId", async (req, res) => {
-  try {
-    const song = await Song.findById(req.params.songId);
-    if (!song) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Song not found" });
-    }
-    res.json({ success: true, url: song.file_path });
   } catch (error) {
     res.status(500).json({ success: false, message: "Server error" });
   }
