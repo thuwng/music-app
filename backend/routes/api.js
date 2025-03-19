@@ -9,10 +9,23 @@ const bcrypt = require("bcrypt");
 const mm = require("music-metadata"); // Thư viện music-metadata
 const fs = require("fs");
 const cors = require("cors"); // Thêm CORS
+const cloudinary = require("cloudinary").v2;
+
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
 
 const app = express();
 app.use(express.json());
-app.use(cors({ origin: "http://localhost:3000" })); // Cấu hình CORS cho frontend
+app.use(
+  cors({
+    origin: "https://otter-tune.onrender.com",
+    methods: ["GET", "POST", "PUT", "DELETE"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  })
+);
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -177,7 +190,6 @@ router.post(
   },
   async (req, res) => {
     const { userId, title, artist, album, genre } = req.body;
-    const file_path = req.file.path.replace(/\\/g, "/").replace("uploads/", "");
 
     if (!userId) {
       return res
@@ -186,6 +198,14 @@ router.post(
     }
 
     try {
+      // Upload file âm thanh lên Cloudinary
+      const audioResult = await cloudinary.uploader.upload(req.file.path, {
+        resource_type: "video", // Dùng "video" để hỗ trợ file âm thanh
+        folder: "songs",
+      });
+      const file_path = audioResult.secure_url; // Lưu URL từ Cloudinary
+
+      // Trích xuất metadata từ file tạm
       console.log(`Parsing metadata for file: ${req.file.originalname}`);
       const metadata = await mm.parseFile(req.file.path, { duration: true });
       console.log("Metadata parsed successfully:", {
@@ -215,73 +235,35 @@ router.post(
         const minutes = Math.floor(durationInSeconds / 60);
         const seconds = Math.floor(durationInSeconds % 60);
         duration = `${minutes}:${seconds < 10 ? "0" + seconds : seconds}`;
-      } else {
-        console.warn(
-          `No duration found in metadata for ${req.file.originalname}`
-        );
       }
 
-      let coverImagePath = "/assets/images/cute-otter.png";
+      // Upload ảnh bìa lên Cloudinary nếu có
+      let coverImagePath = "/assets/images/cute-otter.png"; // Thay bằng URL mặc định từ Cloudinary
       if (metadata.common.picture && metadata.common.picture.length > 0) {
-        try {
-          const picture = metadata.common.picture[0];
-          const imageExt = picture.format === "image/jpeg" ? "jpg" : "png";
-          coverImagePath = path.join(
-            "public/assets/images",
-            `${path.parse(req.file.filename).name}_cover.${imageExt}`
-          );
-
-          const imageDir = path.join(__dirname, "../public/assets/images");
-          if (!fs.existsSync(imageDir)) {
-            fs.mkdirSync(imageDir, { recursive: true });
-            console.log(`Created directory: ${imageDir}`);
+        const picture = metadata.common.picture[0];
+        const imageBuffer = picture.data;
+        const imageResult = await cloudinary.uploader.upload(
+          `data:${picture.format};base64,${imageBuffer.toString("base64")}`,
+          {
+            folder: "song_covers",
           }
-
-          fs.writeFileSync(
-            path.join(__dirname, "../", coverImagePath),
-            picture.data
-          );
-          coverImagePath = `/assets/images/${
-            path.parse(req.file.filename).name
-          }_cover.${imageExt}`;
-          console.log(`Cover image saved to: ${coverImagePath}`);
-        } catch (imageError) {
-          console.error("Error processing cover image:", {
-            message: imageError.message,
-            stack: imageError.stack,
-          });
-          coverImagePath = "/assets/images/cute-otter.png"; // Fallback nếu lỗi
-        }
-      } else {
-        console.warn(
-          `No cover image found in metadata for ${req.file.originalname}`
         );
+        coverImagePath = imageResult.secure_url;
       }
 
       let lyrics = "No lyrics available";
       if (metadata.common.lyrics && metadata.common.lyrics.length > 0) {
-        const lyricObj = metadata.common.lyrics[0];
-        if (typeof lyricObj === "string") {
-          lyrics = lyricObj.trim();
-        } else if (lyricObj && typeof lyricObj.text === "string") {
-          lyrics = lyricObj.text.trim();
-        } else if (lyricObj && typeof lyricObj.value === "string") {
-          lyrics = lyricObj.value.trim();
-        } else {
-          console.warn(
-            `Invalid lyrics format for ${req.file.originalname}:`,
-            lyricObj
-          );
-        }
+        lyrics = metadata.common.lyrics[0].text || "No lyrics available";
       }
 
+      // Lưu thông tin bài hát vào MongoDB
       const song = new Song({
         userId,
         title: songTitle,
         artist: songArtist,
         album: songAlbum,
-        file_path,
-        coverImagePath,
+        file_path, // URL từ Cloudinary
+        coverImagePath, // URL từ Cloudinary
         lyrics,
         duration,
         genre: genre || "Other",
@@ -289,23 +271,24 @@ router.post(
 
       await song.save();
       console.log(`Song saved successfully: ${song._id}`);
+
+      // Xóa file tạm sau khi upload
+      if (fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
+      }
+
       res.json({ success: true, song });
     } catch (error) {
       console.error("Detailed upload error:", {
         message: error.message,
         stack: error.stack,
-        filePath: file_path,
-        metadata: error.metadata || "No metadata available",
-        code: error.code,
       });
-      if (req.file && fs.existsSync(req.file.path)) {
-        fs.unlink(req.file.path, (err) => {
-          if (err) console.error("Error deleting file:", err);
-        });
+      if (fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
       }
       res.status(500).json({
         success: false,
-        message: `Failed to upload song: ${error.message}. Please try again or check your connection.`,
+        message: `Failed to upload song: ${error.message}`,
       });
     }
   }
@@ -358,18 +341,19 @@ router.delete("/favorites/:userId/:songId", async (req, res) => {
 });
 
 // Route tải file âm thanh
-router.get("/download/:filePath", (req, res) => {
-  const filePath = path.join(__dirname, "../uploads", req.params.filePath);
-  res.download(filePath, (err) => {
-    if (err) {
-      console.error("Download error:", err);
-      res.status(500).json({
-        success: false,
-        message: "Download error",
-        error: err.message,
-      });
+router.get("/download/:songId", async (req, res) => {
+  try {
+    const song = await Song.findById(req.params.songId);
+    if (!song) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Song not found" });
     }
-  });
+    res.json({ success: true, url: song.file_path });
+  } catch (error) {
+    console.error("Download error:", error);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
 });
 
 // Route xóa bài hát khỏi cơ sở dữ liệu và danh sách yêu thích

@@ -1,20 +1,9 @@
 const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
-const dotenv = require("dotenv");
 const path = require("path");
 const apiRoutes = require("./routes/api.js");
 const timeout = require("connect-timeout");
-
-// Load biến môi trường từ file .env
-dotenv.config();
-
-const fs = require("fs");
-
-// Tạo thư mục uploads nếu chưa tồn tại
-if (!fs.existsSync(path.join(__dirname, "uploads"))) {
-  fs.mkdirSync(path.join(__dirname, "uploads"));
-}
 
 // Khởi tạo ứng dụng Express
 const app = express();
