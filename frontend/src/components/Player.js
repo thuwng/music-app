@@ -282,6 +282,7 @@ function Player() {
                   ? favoriteSongs.some((favSong) => favSong?._id === song._id)
                   : false;
                 return (
+                  // Trong Player.js, thêm log vào phần hiển thị ảnh bìa
                   <div className="song-item" key={song._id}>
                     <img
                       src={

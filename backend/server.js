@@ -24,6 +24,9 @@ app.use(
   express.static(path.join(__dirname, "public/assets/images"))
 );
 
+// Thêm middleware để phục vụ thư mục backend/picture
+app.use("/pictures", express.static(path.join(__dirname, "picture")));
+
 app.use(timeout("600s"));
 
 app.use((req, res, next) => {

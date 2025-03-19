@@ -135,7 +135,7 @@ router.get("/songs/:userId", async (req, res) => {
   }
 });
 
-// Route tải bài hát lên (cải thiện xử lý ảnh bìa)
+// Route tải bài hát lên (sửa để lưu ảnh bìa vào backend/picture)
 router.post(
   "/songs",
   (req, res, next) => {
@@ -178,8 +178,8 @@ router.post(
       try {
         metadata = await mm.parseFile(filePathOnServer, {
           duration: true,
-          skipCovers: false, // Đảm bảo lấy ảnh bìa
-          skipPostHeaders: true, // Bỏ qua thông tin không cần thiết
+          skipCovers: false,
+          skipPostHeaders: true,
         });
         console.log("Metadata extracted:", {
           title: metadata.common.title,
@@ -222,8 +222,16 @@ router.post(
         duration = `${minutes}:${seconds < 10 ? "0" + seconds : seconds}`;
       }
 
-      // Bước 3: Xử lý ảnh bìa (nếu có)
+      // Bước 3: Xử lý ảnh bìa (lưu vào backend/picture)
       let coverImagePath = "/assets/images/cute-otter.png";
+      const pictureDir = path.join(__dirname, "../picture");
+
+      // Tạo thư mục backend/picture nếu chưa tồn tại
+      if (!fs.existsSync(pictureDir)) {
+        console.log("Creating directory backend/picture...");
+        fs.mkdirSync(pictureDir, { recursive: true });
+      }
+
       if (metadata.common.picture && metadata.common.picture.length > 0) {
         console.log(
           "Found cover image in metadata:",
@@ -232,25 +240,24 @@ router.post(
         );
         const picture = metadata.common.picture[0];
         const imageBuffer = picture.data;
-        const imageFormat = picture.format || "image/jpeg"; // Mặc định là JPEG nếu không có định dạng
+        const imageFormat = picture.format || "jpeg"; // Mặc định là JPEG nếu không có định dạng
+        const imageExtension = imageFormat.split("/")[1] || "jpg"; // Lấy phần mở rộng (jpeg -> jpg)
 
-        console.log("Cover image format:", imageFormat);
-        console.log("Cover image size:", imageBuffer.length, "bytes");
+        // Tạo tên file cho ảnh bìa
+        const coverFileName = `cover_${Date.now()}.${imageExtension}`;
+        const coverFilePath = path.join(pictureDir, coverFileName);
+
+        console.log("Saving cover image to:", coverFilePath);
 
         try {
-          const imageResult = await cloudinary.uploader.upload(
-            `data:${imageFormat};base64,${imageBuffer.toString("base64")}`,
-            {
-              folder: "song_covers",
-              resource_type: "image",
-            }
-          );
-          coverImagePath = imageResult.secure_url;
-          console.log("Cover image uploaded to Cloudinary:", coverImagePath);
-        } catch (imageUploadError) {
-          console.error("Error uploading cover image to Cloudinary:", {
-            message: imageUploadError.message,
-            stack: imageUploadError.stack,
+          // Lưu ảnh bìa vào thư mục backend/picture
+          fs.writeFileSync(coverFilePath, imageBuffer);
+          coverImagePath = `/pictures/${coverFileName}`; // Đường dẫn tương đối để frontend truy cập
+          console.log("Cover image saved to server:", coverImagePath);
+        } catch (imageSaveError) {
+          console.error("Error saving cover image to server:", {
+            message: imageSaveError.message,
+            stack: imageSaveError.stack,
           });
           coverImagePath = "/assets/images/cute-otter.png";
         }
@@ -258,7 +265,7 @@ router.post(
         console.log("No cover image found in metadata, using default image.");
       }
 
-      // Bước 4: Lưu thông tin bài hát vào MongoDB (bỏ qua lyrics để tối ưu)
+      // Bước 4: Lưu thông tin bài hát vào MongoDB
       console.log("Saving song to MongoDB...");
       const song = new Song({
         userId,
@@ -276,7 +283,7 @@ router.post(
 
       // Bước 5: Xóa file tạm trên server
       if (fs.existsSync(filePathOnServer)) {
-        console.log("Deleting temporary file on server...");
+        console.log("Deleting temporary audio file on server...");
         fs.unlinkSync(filePathOnServer);
       }
 
@@ -285,7 +292,9 @@ router.post(
     } catch (error) {
       // Xóa file tạm nếu có lỗi
       if (fs.existsSync(filePathOnServer)) {
-        console.log("Error occurred, deleting temporary file on server...");
+        console.log(
+          "Error occurred, deleting temporary audio file on server..."
+        );
         fs.unlinkSync(filePathOnServer);
       }
 
