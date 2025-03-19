@@ -293,8 +293,15 @@ function Player() {
                       alt="Song Cover"
                       className="song-icon"
                       onError={(e) => {
+                        console.error(
+                          "Error loading cover image:",
+                          song.coverImagePath
+                        );
                         e.target.src = "/assets/images/cute-otter.png";
                       }}
+                      onLoad={() =>
+                        console.log("Cover image loaded:", song.coverImagePath)
+                      }
                     />
                     <div className="song-details">
                       <span className="song-title">

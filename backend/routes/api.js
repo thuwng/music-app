@@ -135,7 +135,7 @@ router.get("/songs/:userId", async (req, res) => {
   }
 });
 
-// Route tải bài hát lên (đã tối ưu hóa)
+// Route tải bài hát lên (cải thiện xử lý ảnh bìa)
 router.post(
   "/songs",
   (req, res, next) => {
@@ -172,14 +172,20 @@ router.post(
       const file_path = audioResult.secure_url;
       console.log("Audio uploaded to Cloudinary:", file_path);
 
-      // Bước 2: Trích xuất metadata từ file MP3 (chỉ lấy thông tin cần thiết)
+      // Bước 2: Trích xuất metadata từ file MP3
       console.log("Extracting metadata...");
       let metadata;
       try {
         metadata = await mm.parseFile(filePathOnServer, {
           duration: true,
-          skipCovers: false, // Vẫn lấy ảnh bìa
+          skipCovers: false, // Đảm bảo lấy ảnh bìa
           skipPostHeaders: true, // Bỏ qua thông tin không cần thiết
+        });
+        console.log("Metadata extracted:", {
+          title: metadata.common.title,
+          artist: metadata.common.artist,
+          album: metadata.common.album,
+          hasCover: !!metadata.common.picture,
         });
       } catch (metadataError) {
         console.error("Error extracting metadata:", metadataError.message);
@@ -220,25 +226,32 @@ router.post(
       let coverImagePath = "/assets/images/cute-otter.png";
       if (metadata.common.picture && metadata.common.picture.length > 0) {
         console.log(
-          "Found cover image in metadata, uploading to Cloudinary..."
+          "Found cover image in metadata:",
+          metadata.common.picture.length,
+          "images"
         );
         const picture = metadata.common.picture[0];
         const imageBuffer = picture.data;
+        const imageFormat = picture.format || "image/jpeg"; // Mặc định là JPEG nếu không có định dạng
+
+        console.log("Cover image format:", imageFormat);
+        console.log("Cover image size:", imageBuffer.length, "bytes");
+
         try {
           const imageResult = await cloudinary.uploader.upload(
-            `data:${picture.format};base64,${imageBuffer.toString("base64")}`,
+            `data:${imageFormat};base64,${imageBuffer.toString("base64")}`,
             {
               folder: "song_covers",
+              resource_type: "image",
             }
           );
           coverImagePath = imageResult.secure_url;
           console.log("Cover image uploaded to Cloudinary:", coverImagePath);
         } catch (imageUploadError) {
-          console.error(
-            "Error uploading cover image:",
-            imageUploadError.message
-          );
-          // Dùng ảnh mặc định nếu không tải được ảnh bìa
+          console.error("Error uploading cover image to Cloudinary:", {
+            message: imageUploadError.message,
+            stack: imageUploadError.stack,
+          });
           coverImagePath = "/assets/images/cute-otter.png";
         }
       } else {
@@ -292,7 +305,7 @@ router.post(
   }
 );
 
-// Route tải file MP3 (sửa để chuyển hướng trực tiếp đến URL của file)
+// Route tải file MP3 (giữ nguyên)
 router.get("/download/:songId", async (req, res) => {
   try {
     const song = await Song.findById(req.params.songId);
@@ -301,7 +314,6 @@ router.get("/download/:songId", async (req, res) => {
         .status(404)
         .json({ success: false, message: "Song not found" });
     }
-    // Chuyển hướng trực tiếp đến URL của file trên Cloudinary
     res.redirect(song.file_path);
   } catch (error) {
     console.error("Error in /download route:", error);
